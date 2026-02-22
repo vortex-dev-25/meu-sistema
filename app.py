@@ -1,29 +1,48 @@
-from flask import Flask, render_template_string, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
+import sqlite3
+import os
 
 app = Flask(__name__)
-app.secret_key = "chave_super_secreta_123"
+app.secret_key = os.environ.get("SECRET_KEY", "super_secret_key_2026")
 
-admin_user = "marrom"
-admin_password_hash = generate_password_hash("Marrom@2026#Forte")
+DB = "database.db"
 
-usuarios = []
+def conectar():
+    conn = sqlite3.connect(DB)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-login_page = """
-<h2>Login</h2>
-<form method="POST">
-Usuário: <input type="text" name="username"><br>
-Senha: <input type="password" name="password"><br>
-<input type="submit" value="Entrar">
-</form>
-"""
+def criar_banco():
+    conn = conectar()
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        tipo TEXT NOT NULL
+    )
+    """)
+    conn.commit()
+    conn.close()
 
-admin_page = """
-<h2>Painel Admin</h2>
-<p>Bem-vindo, {{user}}</p>
-<a href="/usuarios">Ver Usuários</a><br>
-<a href="/logout">Sair</a>
-"""
+criar_banco()
+
+def criar_admin():
+    conn = conectar()
+    admin = conn.execute("SELECT * FROM usuarios WHERE username = ?", ("marrom",)).fetchone()
+    if not admin:
+        senha_hash = generate_password_hash("Marrom@2026#UltraForte")
+        conn.execute(
+            "INSERT INTO usuarios (username, password, tipo) VALUES (?, ?, ?)",
+            ("marrom", senha_hash, "admin")
+        )
+        conn.commit()
+    conn.close()
+
+criar_admin()
+
+# ROTAS
 
 @app.route("/", methods=["GET", "POST"])
 def login():
@@ -31,27 +50,58 @@ def login():
         user = request.form["username"]
         password = request.form["password"]
 
-        if user == admin_user and check_password_hash(admin_password_hash, password):
-            session["user"] = user
-            return redirect(url_for("admin"))
+        conn = conectar()
+        usuario = conn.execute("SELECT * FROM usuarios WHERE username = ?", (user,)).fetchone()
+        conn.close()
 
-    return render_template_string(login_page)
+        if usuario and check_password_hash(usuario["password"], password):
+            session["user"] = usuario["username"]
+            session["tipo"] = usuario["tipo"]
+            return redirect(url_for("dashboard"))
+
+    return render_template("login.html")
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        user = request.form["username"]
+        password = generate_password_hash(request.form["password"])
+
+        try:
+            conn = conectar()
+            conn.execute("INSERT INTO usuarios (username, password, tipo) VALUES (?, ?, ?)",
+                         (user, password, "user"))
+            conn.commit()
+            conn.close()
+            return redirect(url_for("login"))
+        except:
+            return "Usuário já existe"
+
+    return render_template("register.html")
+
+@app.route("/dashboard")
+def dashboard():
+    if "user" not in session:
+        return redirect(url_for("login"))
+    return render_template("dashboard.html", user=session["user"], tipo=session["tipo"])
 
 @app.route("/admin")
 def admin():
-    if "user" in session:
-        return render_template_string(admin_page, user=session["user"])
-    return redirect(url_for("login"))
+    if "user" not in session or session["tipo"] != "admin":
+        return redirect(url_for("login"))
+    return render_template("admin.html")
 
-@app.route("/usuarios")
-def listar_usuarios():
-    if "user" in session:
-        return "<br>".join(usuarios) if usuarios else "Nenhum usuário"
-    return redirect(url_for("login"))
+@app.route("/api/users")
+def api_users():
+    conn = conectar()
+    usuarios = conn.execute("SELECT username, tipo FROM usuarios").fetchall()
+    conn.close()
+
+    return jsonify([dict(u) for u in usuarios])
 
 @app.route("/logout")
 def logout():
-    session.pop("user", None)
+    session.clear()
     return redirect(url_for("login"))
 
 if __name__ == "__main__":
