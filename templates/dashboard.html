@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="box">
+<h2>Bem-vindo {{user}}</h2>
+<p>Tipo: {{tipo}}</p>
+
+{% if tipo == "admin" %}
+<a href="/admin">Painel Admin</a><br>
+{% endif %}
+
+<a href="/logout">Sair</a>
+</div>
+</body>
+</html>
