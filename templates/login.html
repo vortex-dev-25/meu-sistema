@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="box">
+<h2>Login</h2>
+<form method="POST">
+<input name="username" placeholder="Usuário"><br>
+<input type="password" name="password" placeholder="Senha"><br>
+<button>Entrar</button>
+</form>
+<a href="/register">Criar conta</a>
+</div>
+</body>
+</html>
